@@ -54,6 +54,12 @@ public class ChatProcessor implements PacketListener {
 	if (msg.matches("[Ss][Tt][Aa][Tt][Uu][Ss][Bb][Oo][Tt].*")) {
 
 	    String[] parts = msg.split(" ");
+	    String command = "help";
+	    if ( parts.length >= 2 ) {
+		command = parts[1];
+	    }
+
+	    System.out.println( "Received command:" + command );
 
 	    // Statusbot commands.  Maybe:
 
@@ -62,8 +68,16 @@ public class ChatProcessor implements PacketListener {
 	    // nag - send public @notification to all users who haven't chimed in.
 	    // list - list participant states.
 
-	    if ( parts[1].equalsIgnoreCase("list") ) {
-		listParticipants(msg,sender,response);
+	    if ( command.equalsIgnoreCase("list") ) {
+		processListCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "start" )) {
+		processStartCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "remind" )) {
+		processRemindCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "nag" )) {
+		processNagCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "help" )) {
+		processHelpCommand(msg,sender,response);
 	    }
 	    
 	    
@@ -104,10 +118,42 @@ public class ChatProcessor implements PacketListener {
 	}
     }
 	
-    public void listParticipants( String message , String sender , List<String> response ) {
+    public void processListCommand( String message , String sender , List<String> response ) {
 	for ( Participant participant : bot.participants.values() ) {		
 	    response.add( participant.getMentionName() + " isCheckedIn:" + participant.getIsCheckedIn() );
 	}
+    }
+
+    public void processRemindCommand( String message , String sender , List<String> response ) {
+	// Ideally this will generate private messages.
+	processNagCommand(message,sender,response);
+    }
+
+    public void processNagCommand( String message, String sender, List<String> response ) {
+	String msg = "The following users haven't checked in yet:";
+	for ( Participant participant : bot.participants.values() ) {
+	    if ( participant.getIsCheckedIn() ) {
+		continue;
+	    }
+	    msg += " @" + participant.getMentionName();
+	}
+	response.add(msg);
+    }
+
+    public void processStartCommand( String message, String sender, List<String> response ) {
+	for( Participant participant : bot.participants.values() ) {
+	    participant.setIsCheckedIn(false);
+	}
+	response.add( "Started" );
+	processRemindCommand( message, sender, response );
+    }
+
+
+    public void processHelpCommand( String message , String sender, List<String> response ) {
+	response.add( "/quote start: start the process of reminding people to post status.\n"
+		      +"remind: send a private reminder to everybody that they need to check in (coming soon - for now this is an alias for nag.\n"
+		      +"nag: send a public reminder to everybody who hasn't checked in that they need to check in.\n"
+		      +"list: list the check-in of all participants.\n" );
     }
 }
  
