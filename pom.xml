@@ -45,7 +45,7 @@
         		<artifactId>exec-maven-plugin</artifactId>
         		<version>1.2.1</version>
         		<configuration>
-          			<mainClass>org.xmpp.bots.FortuneBot</mainClass>
+          			<mainClass>org.xmpp.bots.StatusBot</mainClass>
           		</configuration>
 			</plugin>
 			<plugin>
@@ -63,7 +63,7 @@
 				<configuration>
 					<archive>
 						<manifest>
-							<mainClass>org.xmpp.bots.FortuneBot</mainClass>
+							<mainClass>org.xmpp.bots.StatusBot</mainClass>
 						</manifest>
 					</archive>
 				</configuration>

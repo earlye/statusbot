@@ -16,18 +16,16 @@ import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smackx.muc.DiscussionHistory;
 import org.jivesoftware.smackx.muc.MultiUserChat;
 
-public class FortuneBot {
+public class StatusBot {
 	
 	protected Connection connection;
 	//protected MultiUserChat room;
-	protected ArrayList<FortuneProcessor> rooms;
-	protected Fortune fortune;
-	public IMDBMovieQuoteMaker quoteMaker;
+	protected ArrayList<ChatProcessor> rooms;
 	protected boolean shouldRun = true;
-	static protected FortuneBot instance = null;
+	static protected StatusBot instance = null;
 	private Properties props = null;
 	
-	public FortuneBot() {
+	public StatusBot() {
 		props = new Properties();
 		try {
 			InputStream in = getClass().getResourceAsStream("/connection.properties");
@@ -57,7 +55,7 @@ public class FortuneBot {
 	
 	public void disconnect() {
 		if (rooms != null) {
-			for (FortuneProcessor room: rooms) {
+			for (ChatProcessor room: rooms) {
 				try {
 					room.room.leave();
 				} catch( IllegalStateException exc ) {
@@ -88,11 +86,8 @@ public class FortuneBot {
 			ex.printStackTrace();
 		}
 		
-		fortune = new SqlFortune();
-		quoteMaker = new IMDBMovieQuoteMaker(fortune);
-		
 		try {
-			rooms = new ArrayList<FortuneProcessor>();
+			rooms = new ArrayList<ChatProcessor>();
 			String allConfRooms = props.getProperty("rooms");
 			String[] confRooms = allConfRooms.split(",");
 			for (String confRoom : confRooms) {
@@ -101,7 +96,7 @@ public class FortuneBot {
 				MultiUserChat room = new MultiUserChat(connection, confRoomName);
 				DiscussionHistory history = new DiscussionHistory();
 				history.setMaxStanzas(0);
-				FortuneProcessor fp = new FortuneProcessor(this, fortune, room);
+				ChatProcessor fp = new ChatProcessor(this,room);
 				rooms.add(fp);
 				room.addMessageListener(fp);
 				room.join(props.getProperty("nick"), props.getProperty("pass"), history, SmackConfiguration.getPacketReplyTimeout());
@@ -128,54 +123,37 @@ public class FortuneBot {
 	
 	public void stopRunning() {
 		shouldRun = false;
-		fortune.closeDb();
 	}
 	
 	public static void main(String[] args) {
 		
-		if (args.length > 0) {
-			if (args[0].equalsIgnoreCase("load-database")) {
-				System.out.println("Loading database...");
-				SqlFortune f = new SqlFortune();
-				f.createDb();
-				f.loadFromFiles();
-				
-				System.out.println(f.getFortune());
-				System.out.println(f.getFortune("futurama"));
-				
-				
-				f.closeDb();
-			}
-		} else {
-			
-			instance = new FortuneBot();
+	    instance = new StatusBot();
+	    instance.connect();
+	    while (instance.running()) {
+		try {
+		    // pause briefly
+		    Thread.sleep(500);
+		    if ( !instance.connection.isConnected()) {
 			instance.connect();
-			while (instance.running()) {
-				try {
-					// pause briefly
-					Thread.sleep(500);
-					if ( !instance.connection.isConnected()) {
-						instance.connect();
-					}
-				}
-				catch (InterruptedException ex) {
-					System.err.println("Caught Interrupted Exception");
-					ex.printStackTrace();
-				} 
-			
-			}
-		
-			// another delay, so clean up can occur (eg Wismar msg).
-			try {
-				// pause briefly
-				Thread.sleep(2000);
-			}
-			catch (InterruptedException ex) {
-				System.err.println("Caught Interrupted Exception");
-				ex.printStackTrace();
-			}
-				
+		    }
 		}
+		catch (InterruptedException ex) {
+		    System.err.println("Caught Interrupted Exception");
+		    ex.printStackTrace();
+		} 
+		
+	    }
+	    
+	    // another delay, so clean up can occur (eg Wismar msg).
+	    try {
+		// pause briefly
+		Thread.sleep(2000);
+	    }
+	    catch (InterruptedException ex) {
+		System.err.println("Caught Interrupted Exception");
+		ex.printStackTrace();
+	    }
+	    
 	}
 	
 }
