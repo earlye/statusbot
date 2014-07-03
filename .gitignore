@@ -3,5 +3,5 @@
 .metadata/
 .project
 .settings/
-
-
+.idea/
+statusbot.iml
