@@ -25,6 +25,17 @@ import org.jivesoftware.smackx.muc.DiscussionHistory;
 import org.jivesoftware.smackx.muc.MultiUserChat;
 import org.jivesoftware.smackx.muc.Affiliate;
 
+import org.quartz.JobDetail;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.Trigger;
+import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.DateBuilder;
+import static org.quartz.JobBuilder.*;
+import static org.quartz.TriggerBuilder.*;
+import static org.quartz.SimpleScheduleBuilder.*;
+import static org.quartz.CronScheduleBuilder.*;
+
 public class ChatProcessor implements PacketListener {
     protected StatusBot bot;
     protected MultiUserChat room;
@@ -61,13 +72,10 @@ public class ChatProcessor implements PacketListener {
 
 	    System.out.println( "Received command:" + command );
 
-	    // Statusbot commands.  Maybe:
-
-	    // start - re-read user list - all users get set to not chimed in.
-	    // remind - send friendly reminder (private message) to users.
-	    // nag - send public @notification to all users who haven't chimed in.
-	    // list - list participant states.
-
+	    // Statusbot commands.
+	    // It would be nice to implement this using a Map<String,StatusBotCommand>, 
+	    // where StatusBotCommand is an interface containing one method to deal
+	    // with that command.  For now, an ugly if/else tree will suffice.
 	    if ( command.equalsIgnoreCase("list") ) {
 		processListCommand(msg,sender,response);
 	    } else if ( command.equalsIgnoreCase( "start" )) {
@@ -144,7 +152,6 @@ public class ChatProcessor implements PacketListener {
 	for( Participant participant : bot.participants.values() ) {
 	    participant.setIsCheckedIn(false);
 	}
-	response.add( "Started" );
 	processRemindCommand( message, sender, response );
     }
 
@@ -154,6 +161,70 @@ public class ChatProcessor implements PacketListener {
 		      +"remind: send a private reminder to everybody that they need to check in (coming soon - for now this is an alias for nag.\n"
 		      +"nag: send a public reminder to everybody who hasn't checked in that they need to check in.\n"
 		      +"list: list the check-in of all participants.\n" );
+    }
+
+    public void setupScheduleStartCollection() {
+	try {
+	    JobDetail job = newJob(StartCollectionJob.class).build();
+
+	    // Trigger the job to run now, and then repeat every 40 seconds
+	    Trigger trigger = newTrigger()
+		.startNow()
+		.withSchedule(dailyAtHourAndMinute(20, 00))
+		.build();
+
+	    // Tell quartz to schedule the job using our trigger
+	    System.out.println( "scheduler:" + bot.scheduler );
+	    bot.scheduler.scheduleJob(job, trigger);
+	} catch( SchedulerException se ) {
+	    se.printStackTrace();
+	    return;
+	}
+
+    }
+
+    public void setupScheduleRemind() {
+	try {
+	    JobDetail job = newJob(RemindJob.class).build();
+
+	    // Trigger the job to run now, and then repeat every 40 seconds
+	    Trigger trigger = newTrigger()
+		.startNow()
+		.withSchedule(dailyAtHourAndMinute(8, 30))
+		.build();
+
+	    // Tell quartz to schedule the job using our trigger
+	    System.out.println( "scheduler:" + bot.scheduler );
+	    bot.scheduler.scheduleJob(job, trigger);
+	} catch( SchedulerException se ) {
+	    se.printStackTrace();
+	    return;
+	}
+    }
+
+    public void setupScheduleNag() {
+	try {
+	    JobDetail job = newJob(NagJob.class).build();
+
+	    // Trigger the job to run now, and then repeat every 40 seconds
+	    Trigger trigger = newTrigger()
+		.startNow()
+		.withSchedule(dailyAtHourAndMinute(8, 45))
+		.build();
+
+	    // Tell quartz to schedule the job using our trigger
+	    System.out.println( "scheduler:" + bot.scheduler );
+	    bot.scheduler.scheduleJob(job, trigger);
+	} catch( SchedulerException se ) {
+	    se.printStackTrace();
+	    return;
+	}
+    }
+
+    public void setupSchedules() {
+	setupScheduleStartCollection();
+	setupScheduleRemind();
+	setupScheduleNag();
     }
 }
  

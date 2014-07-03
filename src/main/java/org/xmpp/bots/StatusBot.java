@@ -18,11 +18,20 @@ import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smackx.muc.DiscussionHistory;
 import org.jivesoftware.smackx.muc.MultiUserChat;
 
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.impl.StdSchedulerFactory;
+import static org.quartz.JobBuilder.*;
+import static org.quartz.TriggerBuilder.*;
+import static org.quartz.SimpleScheduleBuilder.*;
+
+
 public class StatusBot {
 	
     protected Connection connection;
     protected ArrayList<ChatProcessor> rooms;
     protected Map<String,Participant> participants;
+    protected Scheduler scheduler;
 
     
     protected boolean shouldRun = true;
@@ -32,17 +41,13 @@ public class StatusBot {
     public void addParticipant( Participant participant ) {
 	participants.put( participant.getXmppName() , participant );
     }
-	
+
     public StatusBot() {
 	props = new Properties();
 	try {
 	    InputStream in = getClass().getResourceAsStream("/connection.properties");
 	    props.load(in);
 	    in.close();
-
-	    participants = new HashMap<String,Participant>();
-	    addParticipant( new Participant( "21501_fortunebot_test@conf.hipchat.com/Andy Tompkins" , "アンヂイ" ));
-	    addParticipant( new Participant( "21501_fortunebot_test@conf.hipchat.com/Early Ehlinger" , "Upgrayeddd" ));
 	} catch (FileNotFoundException ex) {
 	    System.out.println("File not found trying to read connection.properties.");
 	    //ex.printStackTrace();
@@ -53,6 +58,10 @@ public class StatusBot {
 	    System.exit(2);
 	}
 
+	participants = new HashMap<String,Participant>();
+	addParticipant( new Participant( "21501_fortunebot_test@conf.hipchat.com/Andy Tompkins" , "アンヂイ" ));
+	addParticipant( new Participant( "21501_fortunebot_test@conf.hipchat.com/Early Ehlinger" , "Upgrayeddd" ));
+
 	Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionHandler(){
 		@Override
 		public void uncaughtException(Thread arg0, Throwable arg1) {
@@ -62,7 +71,6 @@ public class StatusBot {
 			
 	    });
 		
-	connect();
     }
 	
     public void disconnect() {
@@ -108,9 +116,10 @@ public class StatusBot {
 		MultiUserChat room = new MultiUserChat(connection, confRoomName);
 		DiscussionHistory history = new DiscussionHistory();
 		history.setMaxStanzas(0);
-		ChatProcessor fp = new ChatProcessor(this,room);
-		rooms.add(fp);
-		room.addMessageListener(fp);
+		ChatProcessor chatProcessor = new ChatProcessor(this,room);
+		chatProcessor.setupSchedules();
+		rooms.add(chatProcessor);
+		room.addMessageListener(chatProcessor);
 		room.join(props.getProperty("nick"), props.getProperty("pass"), history, SmackConfiguration.getPacketReplyTimeout());
 	    }
 	}
@@ -134,13 +143,38 @@ public class StatusBot {
     }
 	
     public void stopRunning() {
+	stopScheduler();
 	shouldRun = false;
     }
+
+
+    public void startScheduler() {
+        try {
+	    System.out.println( "starting scheduler" );
+            scheduler = StdSchedulerFactory.getDefaultScheduler();
+            scheduler.start();
+        } catch (SchedulerException se) {
+            se.printStackTrace();
+	    return;
+        }
+    }
+
+    public void stopScheduler() {
+	try {
+	    if ( scheduler != null )
+		scheduler.shutdown();
+	    scheduler = null;
+        } catch (SchedulerException se) {
+            se.printStackTrace();
+        }
+    }    
 	
     public static void main(String[] args) {
 		
 	instance = new StatusBot();
+	instance.startScheduler();
 	instance.connect();
+
 	while (instance.running()) {
 	    try {
 		// pause briefly
@@ -165,7 +199,8 @@ public class StatusBot {
 	    System.err.println("Caught Interrupted Exception");
 	    ex.printStackTrace();
 	}
-	    
+
+	instance.quit();
     }
-	
+    
 }
