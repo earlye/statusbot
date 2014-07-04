@@ -127,9 +127,31 @@ public class ChatProcessor implements PacketListener {
     }
 	
     public void processListCommand( String message , String sender , List<String> response ) {
+	List<Participant> checkedIn = new ArrayList<Participant>();
+	List<Participant> notCheckedIn = new ArrayList<Participant>();
 	for ( Participant participant : bot.participants.values() ) {		
-	    response.add( participant.getMentionName() + " isCheckedIn:" + participant.getIsCheckedIn() );
+	    if ( participant.getIsCheckedIn() ) {
+		checkedIn.add(participant);
+	    } else {
+		notCheckedIn.add(participant);
+	    }
 	}
+
+	if ( !checkedIn.isEmpty() ) {
+	    String msg = "The following users have checked in:";
+	    for( Participant participant : checkedIn ) {
+		msg += " " + participant.getMentionName();
+	    }
+	    response.add(msg);
+	}
+
+	if ( !notCheckedIn.isEmpty() ) {
+	    String msg = "The following users have not checked in:";
+	    for( Participant participant : notCheckedIn ) {
+		msg += " " + participant.getMentionName();
+	    }
+	    response.add(msg);	    
+	}	   
     }
 
     public void processRemindCommand( String message , String sender , List<String> response ) {
@@ -152,7 +174,6 @@ public class ChatProcessor implements PacketListener {
 	for( Participant participant : bot.participants.values() ) {
 	    participant.setIsCheckedIn(false);
 	}
-	processRemindCommand( message, sender, response );
     }
 
 
@@ -170,7 +191,7 @@ public class ChatProcessor implements PacketListener {
 	    // Trigger the job to run now, and then repeat every 40 seconds
 	    Trigger trigger = newTrigger()
 		.startNow()
-		.withSchedule(dailyAtHourAndMinute(20, 00))
+		.withSchedule(dailyAtHourAndMinute(12, 00))
 		.build();
 
 	    // Tell quartz to schedule the job using our trigger
@@ -183,7 +204,26 @@ public class ChatProcessor implements PacketListener {
 
     }
 
-    public void setupScheduleRemind() {
+    public void setupScheduleRemindAfternoon() {
+	try {
+	    JobDetail job = newJob(RemindJob.class).build();
+
+	    // Trigger the job to run now, and then repeat every 40 seconds
+	    Trigger trigger = newTrigger()
+		.startNow()
+		.withSchedule(dailyAtHourAndMinute(4, 45))
+		.build();
+
+	    // Tell quartz to schedule the job using our trigger
+	    System.out.println( "scheduler:" + bot.scheduler );
+	    bot.scheduler.scheduleJob(job, trigger);
+	} catch( SchedulerException se ) {
+	    se.printStackTrace();
+	    return;
+	}
+    }
+
+    public void setupScheduleRemindMorning() {
 	try {
 	    JobDetail job = newJob(RemindJob.class).build();
 
@@ -223,7 +263,8 @@ public class ChatProcessor implements PacketListener {
 
     public void setupSchedules() {
 	setupScheduleStartCollection();
-	setupScheduleRemind();
+	setupScheduleRemindAfternoon();
+	setupScheduleRemindMorning();
 	setupScheduleNag();
     }
 }
