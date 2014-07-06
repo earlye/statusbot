@@ -191,7 +191,7 @@ public class ChatProcessor implements PacketListener {
 	    // Trigger the job to run now, and then repeat every 40 seconds
 	    Trigger trigger = newTrigger()
 		.startNow()
-		.withSchedule(dailyAtHourAndMinute(12, 00))
+		.withSchedule(cronSchedule("0 0 12 ? * MON-FRI"))
 		.build();
 
 	    // Tell quartz to schedule the job using our trigger
@@ -211,7 +211,7 @@ public class ChatProcessor implements PacketListener {
 	    // Trigger the job to run now, and then repeat every 40 seconds
 	    Trigger trigger = newTrigger()
 		.startNow()
-		.withSchedule(dailyAtHourAndMinute(4, 45))
+		.withSchedule(cronSchedule("0 45 16 ? * MON-FRI"))
 		.build();
 
 	    // Tell quartz to schedule the job using our trigger
@@ -230,7 +230,7 @@ public class ChatProcessor implements PacketListener {
 	    // Trigger the job to run now, and then repeat every 40 seconds
 	    Trigger trigger = newTrigger()
 		.startNow()
-		.withSchedule(dailyAtHourAndMinute(8, 30))
+		.withSchedule(cronSchedule("8 30 16 ? * MON-FRI"))
 		.build();
 
 	    // Tell quartz to schedule the job using our trigger
@@ -249,7 +249,7 @@ public class ChatProcessor implements PacketListener {
 	    // Trigger the job to run now, and then repeat every 40 seconds
 	    Trigger trigger = newTrigger()
 		.startNow()
-		.withSchedule(dailyAtHourAndMinute(8, 45))
+		.withSchedule(cronSchedule("8 45 16 ? * MON-FRI"))
 		.build();
 
 	    // Tell quartz to schedule the job using our trigger
