@@ -4,6 +4,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.Class;
+import java.lang.ClassNotFoundException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,16 +39,31 @@ import static org.quartz.SimpleScheduleBuilder.*;
 import static org.quartz.CronScheduleBuilder.*;
 
 public class ChatProcessor implements PacketListener {
-    protected StatusBot bot;
     protected MultiUserChat room;
+    protected RoomConfig roomConfig;
+    protected Map<String,Participant> participants;
+    protected Map<String,Participant> participantsByMention;
 
-    public ChatProcessor(StatusBot bot, MultiUserChat chatRoom) {
-	this.bot = bot;
+    public ChatProcessor(MultiUserChat chatRoom,RoomConfig roomConfig) {
 	room = chatRoom;
+	this.roomConfig = roomConfig;
+	participants = new HashMap<String,Participant>();
+	participantsByMention = new HashMap<String,Participant>();
+
+	if ( null != roomConfig && null != roomConfig.getParticipants() ) {
+	    for( Participant participant : roomConfig.getParticipants() ) {
+		addParticipant(participant);
+	    }
+	}
+    }
+
+    public void addParticipant( Participant participant ) {
+	System.out.println( "Adding participant:" + participant.toString() );
+	participants.put( participant.getXmppName() , participant );
+	participantsByMention.put(participant.getMentionName(), participant);
     }
 		
     public void processPacket(Packet packet) {
-
 	System.out.println("Packet received:" + packet.toXML());
 
 	if (packet instanceof Message)
@@ -62,12 +79,12 @@ public class ChatProcessor implements PacketListener {
         	
 	System.out.println("Received message: " + msg);
         
-	if (msg.matches("[Ss][Tt][Aa][Tt][Uu][Ss][Bb][Oo][Tt].*")) {
+	if (msg.matches("@status [Bb][Oo][Tt].*")) {
 
 	    String[] parts = msg.split(" ");
 	    String command = "help";
-	    if ( parts.length >= 2 ) {
-		command = parts[1];
+	    if ( parts.length >= 3 ) {
+		command = parts[2];
 	    }
 
 	    System.out.println( "Received command:" + command );
@@ -86,11 +103,16 @@ public class ChatProcessor implements PacketListener {
 		processNagCommand(msg,sender,response);
 	    } else if ( command.equalsIgnoreCase( "help" )) {
 		processHelpCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "excuse" )) {
+		processExcuseCommand(msg,sender,response);
+	    } else if ( command.equalsIgnoreCase( "forget" )) {
+		processForgetCommand(msg,sender,response);
 	    }
 	    
-	    
-	} else if (msg.matches("[Ss][Tt][Aa][Tt][Uu][Ss]:.*")) {
+	} else if (msg.matches("@status .*")) {
+
 	    processStatusMessage(msg,sender,response);
+
         }
 
 	sendResponse(response);
@@ -117,9 +139,29 @@ public class ChatProcessor implements PacketListener {
 	    }
         }
     }
+
+    public void processSetIsCheckedIn(String status, boolean isCheckedIn) {
+	String[] parts = status.split(" ");
+	int i = 2; // 0-> @status 1-> bot 2-> forget/excuse...
+	while( ++i < parts.length ) {
+	    String mention = parts[i].substring(1);
+	    Participant participant = participantsByMention.get(mention);
+	    if ( participant != null ) {
+		participant.setIsCheckedIn(isCheckedIn);
+	    }
+	}
+    }
+
+    public void processForgetCommand(String status , String sender, List<String> response ) {
+	processSetIsCheckedIn(status,false);	
+    }
+
+    public void processExcuseCommand(String status , String sender, List<String> response ) {
+	processSetIsCheckedIn(status,true);
+    }
 	
     public void processStatusMessage(String status, String sender, List<String> response) {
-	Participant participant = bot.participants.get( sender );
+	Participant participant = participants.get( sender );
 	if ( participant != null ) {
 	    participant.setIsCheckedIn( true );
 	    response.add( "Glad to hear it, @" + participant.getMentionName() + "." );
@@ -129,7 +171,7 @@ public class ChatProcessor implements PacketListener {
     public void processListCommand( String message , String sender , List<String> response ) {
 	List<Participant> checkedIn = new ArrayList<Participant>();
 	List<Participant> notCheckedIn = new ArrayList<Participant>();
-	for ( Participant participant : bot.participants.values() ) {		
+	for ( Participant participant : participants.values() ) {		
 	    if ( participant.getIsCheckedIn() ) {
 		checkedIn.add(participant);
 	    } else {
@@ -160,18 +202,24 @@ public class ChatProcessor implements PacketListener {
     }
 
     public void processNagCommand( String message, String sender, List<String> response ) {
-	String msg = "The following users haven't checked in yet:";
-	for ( Participant participant : bot.participants.values() ) {
-	    if ( participant.getIsCheckedIn() ) {
-		continue;
+	List<Participant> notCheckedIn = new ArrayList<Participant>();
+	for( Participant participant : participants.values() ) {
+	    if (!participant.getIsCheckedIn()) {
+		notCheckedIn.add(participant);
 	    }
-	    msg += " @" + participant.getMentionName();
 	}
-	response.add(msg);
+
+	if (!notCheckedIn.isEmpty()) {
+	    String msg = "The following users haven't checked in yet:";
+	    for ( Participant participant : notCheckedIn ) {
+		msg += " @" + participant.getMentionName();
+	    }
+	    response.add(msg);
+	}
     }
 
     public void processStartCommand( String message, String sender, List<String> response ) {
-	for( Participant participant : bot.participants.values() ) {
+	for( Participant participant : participants.values() ) {
 	    participant.setIsCheckedIn(false);
 	}
     }
@@ -181,91 +229,37 @@ public class ChatProcessor implements PacketListener {
 	response.add( "/quote start: start the process of reminding people to post status.\n"
 		      +"remind: send a private reminder to everybody that they need to check in (coming soon - for now this is an alias for nag.\n"
 		      +"nag: send a public reminder to everybody who hasn't checked in that they need to check in.\n"
-		      +"list: list the check-in of all participants.\n" );
+		      +"list: list the check-in of all participants.\n"
+		      +"excuse: excuse specified team members from providing status (i.e., set isCheckedIn = true)\n"
+		      +"forget: forget that specified team members have provided status (i.e., set isCheckedIn = false)\n" );
     }
 
-    public void setupScheduleStartCollection() {
-	try {
-	    JobDetail job = newJob(StartCollectionJob.class).build();
+    public void scheduleJob( Class klass , String cronString ) throws SchedulerException {
+	JobDetail job = newJob(klass)
+	    .usingJobData("RoomName",room.getRoom())
+	    .build();
+	
+	Trigger trigger = newTrigger()
+	    .startNow()
+	    .withSchedule(cronSchedule(cronString))
+	    .build();
+	
+	System.out.println( "Scheduling job \"" + klass.getName() + "\":" + cronString + " for room:" + room.getRoom());
+	StatusBot.getScheduler().scheduleJob(job,trigger);
+    }
 
-	    // Trigger the job to run now, and then repeat every 40 seconds
-	    Trigger trigger = newTrigger()
-		.startNow()
-		.withSchedule(cronSchedule("0 0 12 ? * MON-FRI"))
-		.build();
-
-	    // Tell quartz to schedule the job using our trigger
-	    System.out.println( "scheduler:" + bot.scheduler );
-	    bot.scheduler.scheduleJob(job, trigger);
-	} catch( SchedulerException se ) {
-	    se.printStackTrace();
-	    return;
+    public void setupSchedules() throws SchedulerException {
+	if ( null != roomConfig.getEventConfigs()) {
+	    for( EventConfig eventConfig : roomConfig.getEventConfigs() ) {
+		try {
+		    Class klass = Class.forName( eventConfig.getCommandType() );
+		    scheduleJob( klass , eventConfig.getCron() );
+		} catch( ClassNotFoundException e ) {
+		    System.err.println( "Could not find class while setting up schedule." );
+		    e.printStackTrace();
+		}
+	    }
 	}
-
-    }
-
-    public void setupScheduleRemindAfternoon() {
-	try {
-	    JobDetail job = newJob(RemindJob.class).build();
-
-	    // Trigger the job to run now, and then repeat every 40 seconds
-	    Trigger trigger = newTrigger()
-		.startNow()
-		.withSchedule(cronSchedule("0 45 16 ? * MON-FRI"))
-		.build();
-
-	    // Tell quartz to schedule the job using our trigger
-	    System.out.println( "scheduler:" + bot.scheduler );
-	    bot.scheduler.scheduleJob(job, trigger);
-	} catch( SchedulerException se ) {
-	    se.printStackTrace();
-	    return;
-	}
-    }
-
-    public void setupScheduleRemindMorning() {
-	try {
-	    JobDetail job = newJob(RemindJob.class).build();
-
-	    // Trigger the job to run now, and then repeat every 40 seconds
-	    Trigger trigger = newTrigger()
-		.startNow()
-		.withSchedule(cronSchedule("8 30 16 ? * MON-FRI"))
-		.build();
-
-	    // Tell quartz to schedule the job using our trigger
-	    System.out.println( "scheduler:" + bot.scheduler );
-	    bot.scheduler.scheduleJob(job, trigger);
-	} catch( SchedulerException se ) {
-	    se.printStackTrace();
-	    return;
-	}
-    }
-
-    public void setupScheduleNag() {
-	try {
-	    JobDetail job = newJob(NagJob.class).build();
-
-	    // Trigger the job to run now, and then repeat every 40 seconds
-	    Trigger trigger = newTrigger()
-		.startNow()
-		.withSchedule(cronSchedule("8 45 16 ? * MON-FRI"))
-		.build();
-
-	    // Tell quartz to schedule the job using our trigger
-	    System.out.println( "scheduler:" + bot.scheduler );
-	    bot.scheduler.scheduleJob(job, trigger);
-	} catch( SchedulerException se ) {
-	    se.printStackTrace();
-	    return;
-	}
-    }
-
-    public void setupSchedules() {
-	setupScheduleStartCollection();
-	setupScheduleRemindAfternoon();
-	setupScheduleRemindMorning();
-	setupScheduleNag();
     }
 }
  

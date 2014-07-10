@@ -5,3 +5,4 @@
 .settings/
 .idea/
 statusbot.iml
+src/main/resources/config.json
