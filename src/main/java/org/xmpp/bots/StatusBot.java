@@ -53,6 +53,14 @@ public class StatusBot {
     static public Scheduler getScheduler() {
 	return instance.scheduler;
     }
+
+    static public BotConfig getBotConfig() {
+	return instance.botConfig;
+    }
+
+    static public Connection getConnection() {
+	return instance.connection;
+    }
 	
     public void disconnect() {
 	if (rooms != null) {
@@ -66,19 +74,35 @@ public class StatusBot {
 	    }
 	}
     }
-	
-    public void connect() {
-	disconnect();
+
+    public void readConfig() throws SchedulerException {
 	try {
 	    botConfig = BotConfig.parseJsonResource( "config.json" );
 	} catch( IOException e ) {
 	    System.out.println( "IOException reading bot config." );
 	    e.printStackTrace();
 	    return;
+	}	
+
+	rooms = new HashMap<String,ChatProcessor>();
+	for( RoomConfig roomConfig : botConfig.getRooms() ) {
+	    ChatProcessor chatProcessor = new ChatProcessor(roomConfig);
+	    rooms.put(chatProcessor.getConfRoomName(),chatProcessor);
+	}
+    }
+	
+    public void connect() {
+	disconnect();
+
+	if ( botConfig == null ) {
+	    try {
+		readConfig();
+	    } catch(SchedulerException ex) {
+		System.err.println("Caught SchedulerException while joining room");
+	    }
 	}
 
 	ConnectionConfiguration config = new ConnectionConfiguration( botConfig.getHost() , botConfig.getPort() );
-	//config.setCompressionEnabled(true);
 	config.setSASLAuthenticationEnabled(botConfig.getSASLAuthenticationEnabled());
 		
 	System.out.println("Creating XMPP connection");
@@ -94,21 +118,9 @@ public class StatusBot {
 	}
 		
 	try {
-	    rooms = new HashMap<String,ChatProcessor>();
-	    for( RoomConfig roomConfig : botConfig.getRooms() ) {
-		String confRoomName = roomConfig.getName() + "@" + botConfig.getConference();
-
-		System.out.println("Joining room: " + confRoomName);
-		MultiUserChat room = new MultiUserChat(connection,confRoomName);
-		DiscussionHistory history = new DiscussionHistory();
-		history.setMaxStanzas(0);
-		ChatProcessor chatProcessor = new ChatProcessor(room,roomConfig);
-		chatProcessor.setupSchedules();
-		rooms.put(confRoomName,chatProcessor);
-		room.addMessageListener(chatProcessor);
-		room.join(botConfig.getNick(),botConfig.getPassword(), history, SmackConfiguration.getPacketReplyTimeout());
+	    for( ChatProcessor processor : rooms.values() ) {
+		processor.connect();
 	    }
-
 	}
 	catch (XMPPException ex) {
 	    System.err.println("Caught XMPP Exception while joining room");
@@ -117,9 +129,6 @@ public class StatusBot {
 	catch(IllegalStateException ex) {
 	    System.err.println("Caught IllegalStateException while joining room");
 	    ex.printStackTrace();			
-	}
-	catch(SchedulerException ex) {
-	    System.err.println("Caught SchedulerException while joining room");
 	}
     }
 	

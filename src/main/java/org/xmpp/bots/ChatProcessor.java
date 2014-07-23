@@ -39,13 +39,12 @@ import static org.quartz.SimpleScheduleBuilder.*;
 import static org.quartz.CronScheduleBuilder.*;
 
 public class ChatProcessor implements PacketListener {
-    protected MultiUserChat room;
     protected RoomConfig roomConfig;
     protected Map<String,Participant> participants;
     protected Map<String,Participant> participantsByMention;
+    protected MultiUserChat room;
 
-    public ChatProcessor(MultiUserChat chatRoom,RoomConfig roomConfig) {
-	room = chatRoom;
+    public ChatProcessor(RoomConfig roomConfig) throws SchedulerException {
 	this.roomConfig = roomConfig;
 	participants = new HashMap<String,Participant>();
 	participantsByMention = new HashMap<String,Participant>();
@@ -55,6 +54,26 @@ public class ChatProcessor implements PacketListener {
 		addParticipant(participant);
 	    }
 	}
+	setupSchedules();
+    }
+
+    public String getConfRoomName() {
+	return roomConfig.getName() + "@" + StatusBot.getBotConfig().getConference();
+    }
+
+    public void connect() throws XMPPException {
+	String confRoomName = getConfRoomName();
+	System.out.println("Joining room: " + confRoomName);
+
+	MultiUserChat room = new MultiUserChat(StatusBot.getConnection(),confRoomName);
+	DiscussionHistory history = new DiscussionHistory();
+	history.setMaxStanzas(0);
+	room.addMessageListener(this);
+	room.join(StatusBot.getBotConfig().getNick(),
+		  StatusBot.getBotConfig().getPassword(), 
+		  history,
+		  SmackConfiguration.getPacketReplyTimeout());
+	this.room = room;
     }
 
     public void addParticipant( Participant participant ) {
@@ -68,9 +87,7 @@ public class ChatProcessor implements PacketListener {
 
 	if (packet instanceof Message)
 	    processMessage((Message)packet);
-
     }
-
 
     public void processMessage(Message message ) {
 	List<String> response = new ArrayList<String>();
@@ -79,7 +96,7 @@ public class ChatProcessor implements PacketListener {
         	
 	System.out.println("Received message: " + msg);
         
-	if (msg.matches("@status [Bb][Oo][Tt].*")) {
+	if (msg.matches("@[Ss][Tt][Aa][Tt][Uu][Ss][ \t\n\r]*[Bb][Oo][Tt][ \t\n\r]*.*")) {
 
 	    String[] parts = msg.split(" ");
 	    String command = "help";
@@ -109,7 +126,7 @@ public class ChatProcessor implements PacketListener {
 		processForgetCommand(msg,sender,response);
 	    }
 	    
-	} else if (msg.matches("@status .*")) {
+	} else if (msg.matches("@[Ss][Tt][Aa][Tt][Uu][Ss][ \t\n\r]*.*")) {
 
 	    processStatusMessage(msg,sender,response);
 
@@ -119,6 +136,13 @@ public class ChatProcessor implements PacketListener {
     }
 
     public void sendResponse(List<String> response) {
+	if ( null == room ) {
+	    System.err.println( "I was asked to send a response, but I'm not connected to a room." );
+	    for( String responseStr : response ) {
+		System.err.println( responseStr );
+	    }
+	    return;
+	}
         if ( !response.isEmpty() ) {
 	    try {
 		// need delay before sending msg, or things appear out of order
@@ -222,6 +246,9 @@ public class ChatProcessor implements PacketListener {
 	for( Participant participant : participants.values() ) {
 	    participant.setIsCheckedIn(false);
 	}
+	response.add("/quote ------------------------------------------------------------\n"
+		     +"Status bot is now accepting status messages\n"
+		     +"------------------------------------------------------------\n");
     }
 
 
@@ -236,7 +263,7 @@ public class ChatProcessor implements PacketListener {
 
     public void scheduleJob( Class klass , String cronString ) throws SchedulerException {
 	JobDetail job = newJob(klass)
-	    .usingJobData("RoomName",room.getRoom())
+	    .usingJobData("RoomName",getConfRoomName())
 	    .build();
 	
 	Trigger trigger = newTrigger()
@@ -244,7 +271,7 @@ public class ChatProcessor implements PacketListener {
 	    .withSchedule(cronSchedule(cronString))
 	    .build();
 	
-	System.out.println( "Scheduling job \"" + klass.getName() + "\":" + cronString + " for room:" + room.getRoom());
+	System.out.println( "Scheduling job \"" + klass.getName() + "\":" + cronString + " for room:" + getConfRoomName());
 	StatusBot.getScheduler().scheduleJob(job,trigger);
     }
 
